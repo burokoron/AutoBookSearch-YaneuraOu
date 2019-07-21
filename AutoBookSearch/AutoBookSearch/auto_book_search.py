@@ -33,7 +33,7 @@ def main():
 
 
     # 定跡探索
-    multi_pv = int(options['Search']['MultiPV'])
+    multi_pv = int(options['Search']['MinMultiPV'])
     for i in range(int(options['Search']['MaxLoops'])):
         print("loop %d/%d" %(i+1, int(options['Search']['MaxLoops'])))
         multi_pv = search(options, multi_pv)

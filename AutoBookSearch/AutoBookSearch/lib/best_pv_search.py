@@ -4,6 +4,7 @@
 定跡探索を行う
 """
 
+import sys
 import subprocess as sp
 import shogi
 
@@ -39,6 +40,7 @@ def make_theme_book(options):
     # 定跡の探索深さの最大値よりも今回の探索深さが小さいときはエラー
     if max_depth > int(options['YaneuraOu']['Depth']):
         print('Depth should be set to %d or more.' %(max_depth))
+        sys.exit(1)
 
 
     # やねうら王定跡からテラショック定跡を作成する
@@ -209,9 +211,37 @@ def search(options, multi_pv):
     pv_list = pv_search(options['Search']['ThemeSfenFile'], book,
                         int(int(options['YaneuraOu']['Threads']) * k))
 
+    # 最善応手群をファイルに書き込む
     with open(options['Search']['BestPVFile'], 'w') as file:
         for preview in pv_list:
             file.write('%s\n' %(preview[0]))
+
+    # 'AutoMultiPV = yes'ならMultiPVを自動調整する
+    black_resign = False
+    white_resign = False
+    if options.getboolean('Search', 'AutoMultiPV'):
+        for preview in pv_list:
+            if len(preview[0].split(' ')) % 2 == 0:
+                if preview[1] < int(options['Search']['WhiteResignValue']):
+                    multi_pv *= 2
+                    white_resign = True
+                    break
+            else:
+                if preview[1] < int(options['Search']['BlackResignValue']):
+                    multi_pv *= 2
+                    black_resign = True
+                    break
+
+    if black_resign or white_resign:
+        if int(options['Search']['MaxMultiPV']) * 2 == multi_pv:
+            if black_resign == True:
+                print('The conclusion is the white win.')
+            else:
+                print('The conclusion is the black win.')
+            sys.exit()
+        multi_pv = min(int(options['Search']['MaxMultiPV']), multi_pv)
+    else:
+        multi_pv = int(options['Search']['MinMultiPV'])
 
 
     return multi_pv
