@@ -4,6 +4,7 @@
 定跡探索を行う
 """
 
+import os
 import sys
 import subprocess as sp
 import shogi
@@ -217,41 +218,34 @@ def search(options, multi_pv):
             file.write('%s\n' %(preview[0]))
 
     # 'AutoMultiPV = yes'ならMultiPVを自動調整する
-    black_resign = False
-    white_resign = False
+    black_resign = True
+    white_resign = True
     if options.getboolean('Search', 'AutoMultiPV'):
         for preview in pv_list:
             if len(preview[0].split(' ')) % 2 == 0:
-                if preview[1] < int(options['Search']['WhiteResignValue']):
-                    multi_pv *= 2
-                    white_resign = True
-                    break
+                if preview[1] > int(options['Search']['WhiteResignValue']):
+                    white_resign = False
             else:
-                if preview[1] < int(options['Search']['BlackResignValue']):
-                    multi_pv *= 2
-                    black_resign = True
-                    break
+                if preview[1] > int(options['Search']['BlackResignValue']):
+                    black_resign = False
 
     if black_resign or white_resign:
-        if int(options['Search']['MaxMultiPV']) * 2 == multi_pv:
-            if black_resign == True:
-                print('The conclusion is the white win.')
-            else:
-                print('The conclusion is the black win.')
-            sys.exit()
-        multi_pv = min(int(options['Search']['MaxMultiPV']), multi_pv)
+        multi_pv = min(int(options['Search']['MaxMultiPV']), multi_pv*2)
     else:
         multi_pv = int(options['Search']['MinMultiPV'])
 
 
-    return multi_pv
+    return (multi_pv, black_resign, white_resign)
 
 
 
-def make_cmd(options, multi_pv):
+def make_cmd(options, multi_pv, black_resign, white_resign):
     """
     やねうら王へのコマンドを生成する
     """
+
+    with open('none.sfen', 'w') as file:
+        pass
 
     with open(options['Search']['CommandFile'], 'w') as file:
         file.write('EvalDir %s\n' %(options['YaneuraOu']['EvalDir']))
@@ -259,9 +253,18 @@ def make_cmd(options, multi_pv):
         file.write('Hash %s\n' %(options['YaneuraOu']['Hash']))
         file.write('Threads %s\n' %(options['YaneuraOu']['Threads']))
         file.write('MultiPV %d\n' %(multi_pv))
-        file.write('makebook think %s %s '
-                   %(options['Search']['BestPVFile'],
-                     options['Search']['YaneuraDBFile']))
+        if black_resign:
+            file.write('makebook think bw %s none.sfen %s '
+                       %(options['Search']['BestPVFile'],
+                         options['Search']['YaneuraDBFile']))
+        elif white_resign:
+            file.write('makebook think bw none.sfen %s %s '
+                       %(options['Search']['BestPVFile'],
+                         options['Search']['YaneuraDBFile']))
+        else:
+            file.write('makebook think %s %s '
+                       %(options['Search']['BestPVFile'],
+                         options['Search']['YaneuraDBFile']))
         file.write('startmoves 1 moves %s depth %s nodes %s\n'
                    %(options['Search']['MaxMoves'],
                      options['YaneuraOu']['Depth'],
@@ -270,3 +273,5 @@ def make_cmd(options, multi_pv):
                    %(options['Search']['YaneuraDBFile'],
                      options['Search']['TeraShockDBFile']))
         file.write('quit\n')
+
+    os.remove('none.sfen')

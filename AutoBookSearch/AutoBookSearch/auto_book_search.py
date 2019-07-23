@@ -36,8 +36,8 @@ def main():
     multi_pv = int(options['Search']['MinMultiPV'])
     for i in range(int(options['Search']['MaxLoops'])):
         print("loop %d/%d" %(i+1, int(options['Search']['MaxLoops'])))
-        multi_pv = search(options, multi_pv)
-        make_cmd(options, multi_pv)
+        multi_pv, black_resign, white_resign = search(options, multi_pv)
+        make_cmd(options, multi_pv, black_resign, white_resign)
         cmd = (options['YaneuraOu']['EngineFile'] + " file "
                + options['Search']['CommandFile'])
         sp.call(cmd.split())
