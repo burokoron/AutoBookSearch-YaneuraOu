@@ -11,7 +11,7 @@ import sys
 import subprocess as sp
 import configparser
 
-from lib.best_pv_search import search, make_cmd, make_theme_book
+from lib.best_pv_search import BestPVSearch
 
 
 
@@ -28,16 +28,17 @@ def main():
     options.read('options.ini', encoding='utf-8')
 
 
-    # 課題局面までの手順を定跡として作成する
-    make_theme_book(options)
-
-
     # 定跡探索
-    multi_pv = int(options['Search']['MultiPV'])
+    book_search = BestPVSearch(options)
+
+    # 課題局面までの手順を定跡として作成する
+    book_search.make_theme_book()
+
+    # 定跡延長
     for i in range(int(options['Search']['MaxLoops'])):
         print("loop %d/%d" %(i+1, int(options['Search']['MaxLoops'])))
-        multi_pv = search(options, multi_pv)
-        make_cmd(options, multi_pv)
+        book_search.search()
+        book_search.make_cmd()
         cmd = (options['YaneuraOu']['EngineFile'] + " file "
                + options['Search']['CommandFile'])
         sp.call(cmd.split())
