@@ -250,18 +250,22 @@ class BestPVSearch:
                 file.write('%s\n' %(preview[0]))
 
         # 'AutoMultiPV = yes'ならMultiPVを自動調整する
-        self.black_resign = True
-        self.white_resign = True
+        self.black_resign = None
+        self.white_resign = None
         if self.options.getboolean('Search', 'AutoMultiPV'):
             for preview in pv_list:
                 if len(preview[0].split(' ')) % 2 == 0:
                     if preview[1] > int(
                             self.options['Search']['WhiteResignValue']):
                         self.white_resign = False
+                    elif self.white_resign is None:
+                        self.white_resign = True
                 else:
                     if preview[1] > int(
                             self.options['Search']['BlackResignValue']):
                         self.black_resign = False
+                    elif self.black_resign is None:
+                        self.black_resign = True
 
         if self.black_resign or self.white_resign:
             self.multi_pv = min(int(self.options['Search']['MaxMultiPV']),
