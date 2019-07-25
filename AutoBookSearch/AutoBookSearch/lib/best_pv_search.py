@@ -124,7 +124,7 @@ class BestPVSearch:
                 sfen = board.sfen().split(' ')
                 sfen = sfen[0] + sfen[1] + sfen[2]
                 same_pos.add(sfen)
-                move_list = theme.split(' ')[:-2]
+                move_list = theme.split(' ')
                 if '' in move_list:
                     move_list.remove('')
                 if len(move_list) != 2:
