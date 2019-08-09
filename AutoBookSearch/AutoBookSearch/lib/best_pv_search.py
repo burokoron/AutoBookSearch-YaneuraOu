@@ -90,9 +90,12 @@ class BestPVSearch:
                        %(self.options['Search']['MaxMoves'],
                          self.options['YaneuraOu']['Depth'],
                          self.options['YaneuraOu']['Nodes']))
-            file.write('makebook build_tree %s %s\n'
+            file.write('makebook build_tree %s %s '
                        %(self.options['Search']['YaneuraDBFile'],
                          self.options['Search']['TeraShockDBFile']))
+            file.write('black_contempt %d white_contempt %d\n'
+                       %(int(self.options['Search']['BlackContempt'])*-1,
+                         int(self.options['Search']['WhiteContempt'])*-1))
             file.write('quit\n')
 
         cmd = (self.options['YaneuraOu']['EngineFile'] + " file "
@@ -305,9 +308,12 @@ class BestPVSearch:
                        %(self.options['Search']['MaxMoves'],
                          self.options['YaneuraOu']['Depth'],
                          self.options['YaneuraOu']['Nodes']))
-            file.write('makebook build_tree %s %s\n'
+            file.write('makebook build_tree %s %s '
                        %(self.options['Search']['YaneuraDBFile'],
                          self.options['Search']['TeraShockDBFile']))
+            file.write('black_contempt %d white_contempt %d\n'
+                       %(int(self.options['Search']['BlackContempt'])*-1,
+                         int(self.options['Search']['WhiteContempt'])*-1))
             file.write('quit\n')
 
         os.remove('none.sfen')
