@@ -17,10 +17,55 @@ class BestPVSearch:
 
     def __init__(self, options):
         self.options = options
+        self.yaneura_book = {}
+        self.terashock_book = {}
         self.multi_pv = int(options['Search']['MinMultiPV'])
-        self.black_resign = True
-        self.white_resign = True
+        self.black_resign = None
+        self.white_resign = None
         self.book_count = 0
+
+
+
+    @staticmethod
+    def _load_yaneura_book(fpath):
+        """
+        やねうら定跡を読み込む
+        """
+
+        book = {}
+        with open(fpath) as file:
+            data = file.readline()
+            data = file.readline()
+            data = data.replace('\n', '')
+            data = data.replace('sfen ', '')
+            while data != '':
+                data = data.split(' ')
+                turn = data[3]
+                data = data[0] + " " + data[1] + " " + data[2]
+
+                move_list = {}
+                move = file.readline()
+                move = move.replace('\n', '')
+                while not 'sfen' in move:
+                    move = move.split()
+                    move_list[move[0]] = {}
+                    move_list[move[0]]['move'] = move[1]
+                    move_list[move[0]]['value'] = int(move[2])
+                    move_list[move[0]]['depth'] = int(move[3])
+
+                    move = file.readline()
+                    move = move.replace('\n', '')
+                    if move == '':
+                        break
+
+                book[data] = {}
+                book[data]['moves'] = move_list
+                book[data]['turn'] = int(turn)
+
+                data = move.replace('sfen ', '')
+
+        return book
+
 
 
     def make_theme_book(self):
@@ -37,7 +82,7 @@ class BestPVSearch:
             data = data.replace('sfen ', '')
             while data != '':
                 data = data.split(' ')
-                data = data[0] + data[1] + data[2]
+                data = data[0] + " " + data[1] + " " + data[2]
 
                 move = file.readline()
                 move = move.replace('\n', '')
@@ -72,10 +117,6 @@ class BestPVSearch:
         sp.call(cmd.split())
 
 
-        # 課題局面までの手順を定跡に登録
-        print('make theme book')
-
-
         # 課題局面までの手順を探索し，定跡化作成する
         with open(self.options['Search']['CommandFile'], 'w') as file:
             file.write('EvalDir %s\n' %(self.options['YaneuraOu']['EvalDir']))
@@ -94,8 +135,8 @@ class BestPVSearch:
                        %(self.options['Search']['YaneuraDBFile'],
                          self.options['Search']['TeraShockDBFile']))
             file.write('black_contempt %d white_contempt %d\n'
-                       %(int(self.options['Search']['BlackContempt'])*-1,
-                         int(self.options['Search']['WhiteContempt'])*-1))
+                       %(int(self.options['YaneuraOu']['BlackContempt'])*-1,
+                         int(self.options['YaneuraOu']['WhiteContempt'])*-1))
             file.write('quit\n')
 
         cmd = (self.options['YaneuraOu']['EngineFile'] + " file "
@@ -104,7 +145,32 @@ class BestPVSearch:
 
 
 
-    def _pv_search(self, theme_file, book, k):
+    def bulid_terashock_build(self):
+        """
+        やねうら定跡をテラショック定跡に変換する
+        """
+        with open(self.options['Search']['CommandFile'], 'w') as file:
+            file.write('EvalDir %s\n' %(self.options['YaneuraOu']['EvalDir']))
+            file.write('BookDir %s\n' %(self.options['YaneuraOu']['BookDir']))
+            file.write('Hash %s\n' %(self.options['YaneuraOu']['Hash']))
+            file.write('Threads %s\n' %(self.options['YaneuraOu']['Threads']))
+            file.write('MultiPV 1\n')
+            file.write('makebook build_tree %s %s '
+                       %(self.options['Search']['YaneuraDBFile'],
+                         self.options['Search']['TeraShockDBFile']))
+            file.write('black_contempt %d white_contempt %d\n'
+                       %(int(self.options['YaneuraOu']['BlackContempt'])*-1,
+                         int(self.options['YaneuraOu']['WhiteContempt'])*-1))
+            file.write('quit\n')
+
+        cmd = (self.options['YaneuraOu']['EngineFile'] + " file "
+               + self.options['Search']['CommandFile'])
+        sp.call(cmd.split())
+
+
+
+    @staticmethod
+    def _pv_search(theme_file, book, k):
         """
         最善応手上位(課題局面数×k)手を調べる
         """
@@ -115,7 +181,6 @@ class BestPVSearch:
             if '' in theme_list:
                 theme_list.remove('')
 
-        all_pv_list = []
         for theme in theme_list:
             pv_list = []
             for _ in range(k):
@@ -125,7 +190,7 @@ class BestPVSearch:
                 # 課題局面まで動かす
                 board = shogi.Board()
                 sfen = board.sfen().split(' ')
-                sfen = sfen[0] + sfen[1] + sfen[2]
+                sfen = sfen[0] +" " + sfen[1] + " " + sfen[2]
                 same_pos.add(sfen)
                 move_list = theme.split(' ')
                 if '' in move_list:
@@ -135,7 +200,7 @@ class BestPVSearch:
                         board.push_usi(move)
                         preview[0] += ' ' + move
                         sfen = board.sfen().split(' ')
-                        sfen = sfen[0] + sfen[1] + sfen[2]
+                        sfen = sfen[0] +" " + sfen[1] + " " + sfen[2]
                         if sfen in same_pos:
                             break
                         else:
@@ -143,13 +208,15 @@ class BestPVSearch:
 
                 # 最善応手探索
                 while sfen in book:
-                    move_list = book[sfen]
+                    move_list = {}
+                    for move in book[sfen]['moves']:
+                        move_list[move] = book[sfen]['moves'][move]['value']
                     move = max(move_list, key=move_list.get)
                     board.push_usi(move)
                     preview[0] += ' ' + move
                     preview[1] = max(move_list.values())
                     sfen = board.sfen().split(' ')
-                    sfen = sfen[0] + sfen[1] + sfen[2]
+                    sfen = sfen[0] +" " + sfen[1] + " " + sfen[2]
                     if sfen in same_pos:
                         break
                     else:
@@ -162,11 +229,13 @@ class BestPVSearch:
                     break
                 board.pop()
                 sfen = board.sfen().split(' ')
-                sfen = sfen[0] + sfen[1] + sfen[2]
-                move_list = book[sfen]
+                sfen = sfen[0] +" " + sfen[1] + " " + sfen[2]
+                move_list = {}
+                for move in book[sfen]['moves']:
+                    move_list[move] = book[sfen]['moves'][move]['value']
                 move = max(move_list, key=move_list.get)
-                book[sfen][move] -= 100000
-                book[sfen][move] -= 100000
+                book[sfen]['moves'][move]['value'] -= 100000
+                book[sfen]['moves'][move]['value'] -= 100000
                 max_value = max(move_list.values())
                 if int(board.sfen().split(' ')[-1]) == 1:
                     break
@@ -175,84 +244,28 @@ class BestPVSearch:
                 while True:
                     board.pop()
                     sfen = board.sfen().split(' ')
-                    sfen = sfen[0] + sfen[1] + sfen[2]
-                    move_list = book[sfen]
+                    sfen = sfen[0] +" " + sfen[1] + " " + sfen[2]
+                    move_list = {}
+                    for move in book[sfen]['moves']:
+                        move_list[move] = book[sfen]['moves'][move]['value']
                     move = max(move_list, key=move_list.get)
-                    book[sfen][move] = -max_value
+                    book[sfen]['moves'][move]['value'] = -max_value
                     max_value = max(move_list.values())
                     if int(board.sfen().split(' ')[-1]) == 1:
                         break
 
-            all_pv_list += pv_list
 
-
-        return all_pv_list
+        return pv_list
 
 
 
-    def search(self):
+    def _update_multipv(self, pv_list):
         """
-        登録済み定跡を用いて課題局面からの最善応手上位N手を調べる
+        MultiPVの更新
+        投了評価値未満ならMultiPVを2倍にする
+        投了評価値以上ならMultiPVを最小値にする
         """
 
-        # 定跡データベース
-        book = {}
-        with open(self.options['Search']['TeraShockDBFile']) as file:
-            data = file.readline()
-            data = file.readline()
-            data = data.replace('\n', '')
-            data = data.replace('sfen ', '')
-            while data != '':
-                data = data.split(' ')
-                data = data[0] + data[1] + data[2]
-
-                move_list = {}
-                move = file.readline()
-                move = move.replace('\n', '')
-                while not 'sfen' in move:
-                    move_list[move.split(' ')[0]] = int(move.split(' ')[2])
-                    move = file.readline()
-                    move = move.replace('\n', '')
-                    if move == '':
-                        break
-
-                book[data] = move_list
-
-                data = move.replace('sfen ', '')
-
-        # 定跡登録数が増えてなければ探索を終了する
-        book_count = len(book)
-        if (self.book_count > book_count
-                and self.multi_pv == int(
-                    self.options['Search']['MaxMultiPV'])):
-            if self.black_resign:
-                print('White Win!!')
-            elif self.white_resign:
-                print('Black Win!!')
-            else:
-                print('Draw!!')
-            sys.exit()
-        elif self.book_count == book_count:
-            self.book_count += 1
-        else:
-            self.book_count = book_count
-
-
-        # 最善応手群の探索
-        k = 1.5 # 探索幅拡張係数
-
-        pv_list = self._pv_search(self.options['Search']['ThemeSfenFile'],
-                                  book,
-                                  int(int(
-                                      self.options['YaneuraOu']['Threads'])
-                                      * k))
-
-        # 最善応手群をファイルに書き込む
-        with open(self.options['Search']['BestPVFile'], 'w') as file:
-            for preview in pv_list:
-                file.write('%s\n' %(preview[0]))
-
-        # 'AutoMultiPV = yes'ならMultiPVを自動調整する
         self.black_resign = None
         self.white_resign = None
         if self.options.getboolean('Search', 'AutoMultiPV'):
@@ -275,6 +288,199 @@ class BestPVSearch:
                                 self.multi_pv*2)
         else:
             self.multi_pv = int(self.options['Search']['MinMultiPV'])
+
+    @staticmethod
+    def _difference_book_build(yaneura_book, terashock_book, pv_search_file,
+                               black_contempt, white_contempt,
+                               terashock_book_file):
+        """
+        テラショック定跡の差分更新を行う
+        """
+
+        with open(pv_search_file) as file:
+            theme_list = file.read()
+            theme_list = theme_list.split('\n')
+            if '' in theme_list:
+                theme_list.remove('')
+
+
+        for theme in theme_list:
+            same_pos = set()
+            draw = False
+
+            # 課題局面まで動かす
+            board = shogi.Board()
+            sfen = board.sfen().split(' ')
+            sfen = sfen[0] +" " + sfen[1] + " " + sfen[2]
+            # テラショック定跡に存在しない指し手があったらテラショック定跡に追加する
+            if sfen in terashock_book:
+                for _move in yaneura_book[sfen]['moves']:
+                    if _move not in terashock_book[sfen]['moves']:
+                        terashock_book[sfen]['moves'][_move] = yaneura_book[sfen]['moves'][_move]
+                        terashock_book[sfen]['moves'][_move]['depth'] = 0
+            same_pos.add(sfen)
+            move_list = theme.split(' ')
+            if '' in move_list:
+                move_list.remove('')
+            if len(move_list) != 2:
+                for move in move_list[2:]:
+                    board.push_usi(move)
+                    sfen = board.sfen().split(' ')
+                    sfen = sfen[0] +" " + sfen[1] + " " + sfen[2]
+                    if sfen in same_pos:
+                        draw = True
+                        break
+                    else:
+                        same_pos.add(sfen)
+                    # テラショック定跡に存在しない指し手があったらテラショック定跡に追加する
+                    if sfen in terashock_book:
+                        for _move in yaneura_book[sfen]['moves']:
+                            if _move not in terashock_book[sfen]['moves']:
+                                terashock_book[sfen]['moves'][_move] = yaneura_book[sfen]['moves'][_move]
+                                terashock_book[sfen]['moves'][_move]['depth'] = 0
+
+            # テラショック定跡に局面を追加
+            sfen = board.sfen().split(' ')
+            turn = int(sfen[3])
+            sfen = sfen[0] +" " + sfen[1] + " " + sfen[2]
+            if sfen not in terashock_book and sfen in yaneura_book:
+                terashock_book[sfen] = yaneura_book[sfen]
+                for move in terashock_book[sfen]['moves']:
+                    terashock_book[sfen]['moves'][move]['depth'] = 0
+
+
+            # 末端局面の評価値を計算する
+            if draw is True:
+                if turn%2 != 0:
+                    max_value = black_contempt
+                else:
+                    max_value = white_contempt
+            else:
+                move_list = {}
+                for move in terashock_book[sfen]['moves']:
+                    move_list[move] = terashock_book[sfen]['moves'][move]['value']
+                max_value = max(move_list.values())
+
+            if int(board.sfen().split(' ')[-1]) == 1:
+                break
+
+            # 評価値の伝搬
+            while True:
+                move = str(board.pop())
+                sfen = board.sfen().split(' ')
+                turn = int(sfen[3])
+                sfen = sfen[0] +" " + sfen[1] + " " + sfen[2]
+                # 千日手なら千日手評価値にする
+                if draw is True:
+                    if turn%2 != 0 and max_value == white_contempt:
+                        terashock_book[sfen]['moves'][move]['value'] = black_contempt
+                    elif max_value == black_contempt:
+                        terashock_book[sfen]['moves'][move]['value'] = white_contempt
+                    else:
+                        draw = False
+                else:
+                    terashock_book[sfen]['moves'][move]['value'] = -max_value
+                # depthを調べる
+                board.push_usi(move)
+                next_sfen = board.sfen().split(' ')
+                next_sfen = next_sfen[0] +" " + next_sfen[1] + " " + next_sfen[2]
+                if next_sfen in terashock_book:
+                    next_move_list = {}
+                    for next_move in terashock_book[next_sfen]['moves']:
+                        next_move_list[next_move] = terashock_book[next_sfen]['moves'][next_move]['value']
+                    next_move = max(next_move_list, key=next_move_list.get)
+                    terashock_book[sfen]['moves'][move]['depth'] = terashock_book[next_sfen]['moves'][next_move]['depth'] + 1
+                board.pop()
+
+                move_list = {}
+                for move in terashock_book[sfen]['moves']:
+                    move_list[move] = terashock_book[sfen]['moves'][move]['value']
+                max_value = max(move_list.values())
+
+                if int(board.sfen().split(' ')[-1]) == 1:
+                    break
+
+
+        # テラショック定跡をファイルに書き込む
+        with open(terashock_book_file, 'w') as file:
+            file.write('#YANEURAOU-DB2016 1.00\n')
+
+            for sfen in sorted(terashock_book.keys()):
+                file.write('sfen %s %d\n' %(sfen,
+                                            terashock_book[sfen]['turn']))
+                for move in terashock_book[sfen]['moves']:
+                    file.write('%s %s %d %d %d\n' %(move,
+                                                    terashock_book[sfen]['moves'][move]['move'],
+                                                    terashock_book[sfen]['moves'][move]['value'],
+                                                    terashock_book[sfen]['moves'][move]['depth'],
+                                                    1))
+
+
+    def search(self):
+        """
+        登録済み定跡を用いて課題局面からの最善応手上位N手を調べる
+        """
+
+        # 定跡データベース
+        self.yaneura_book = self._load_yaneura_book(
+            self.options['Search']['YaneuraDBFile'])
+        self.terashock_book = self._load_yaneura_book(
+            self.options['Search']['TeraShockDBFile'])
+
+        # 定跡登録数が増えてなければ探索を終了する
+        book_count = len(self.yaneura_book)
+        if (self.book_count > book_count
+                and self.multi_pv == int(
+                    self.options['Search']['MaxMultiPV'])):
+            if self.black_resign:
+                print('White Win!!')
+            elif self.white_resign:
+                print('Black Win!!')
+            else:
+                print('Draw!!')
+            sys.exit()
+        elif self.book_count == book_count:
+            self.book_count += 1
+        else:
+            self.book_count = book_count
+
+
+        # 最善応手群の探索
+        k = 2 # 探索幅拡張係数
+
+        pv_list = self._pv_search(self.options['Search']['ThemeSfenFile'],
+                                  self.terashock_book,
+                                  int(int(
+                                      self.options['YaneuraOu']['Threads'])
+                                      * k))
+
+        # 最善応手群をファイルに書き込む
+        with open(self.options['Search']['BestPVFile'], 'w') as file:
+            for preview in pv_list:
+                file.write('%s\n' %(preview[0]))
+
+        # 'AutoMultiPV = yes'ならMultiPVを自動調整する
+        self._update_multipv(pv_list)
+
+
+        # 局面を探索する
+        self.make_cmd()
+        cmd = (self.options['YaneuraOu']['EngineFile'] + " file "
+               + self.options['Search']['CommandFile'])
+        sp.call(cmd.split())
+
+
+        # テラショック定跡の差分ビルド
+        self.yaneura_book = self._load_yaneura_book(
+            self.options['Search']['YaneuraDBFile'])
+        self.terashock_book = self._load_yaneura_book(
+            self.options['Search']['TeraShockDBFile'])
+
+        self._difference_book_build(self.yaneura_book, self.terashock_book,
+                                    self.options['Search']['BestPVFile'],
+                                    int(self.options['YaneuraOu']['BlackContempt']),
+                                    int(self.options['YaneuraOu']['WhiteContempt']),
+                                    self.options['Search']['TeraShockDBFile'])
 
 
 
@@ -308,12 +514,6 @@ class BestPVSearch:
                        %(self.options['Search']['MaxMoves'],
                          self.options['YaneuraOu']['Depth'],
                          self.options['YaneuraOu']['Nodes']))
-            file.write('makebook build_tree %s %s '
-                       %(self.options['Search']['YaneuraDBFile'],
-                         self.options['Search']['TeraShockDBFile']))
-            file.write('black_contempt %d white_contempt %d\n'
-                       %(int(self.options['Search']['BlackContempt'])*-1,
-                         int(self.options['Search']['WhiteContempt'])*-1))
             file.write('quit\n')
 
         os.remove('none.sfen')

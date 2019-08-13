@@ -8,7 +8,6 @@
 
 import os
 import sys
-import subprocess as sp
 import configparser
 
 from lib.best_pv_search import BestPVSearch
@@ -38,10 +37,9 @@ def main():
     for i in range(int(options['Search']['MaxLoops'])):
         print("loop %d/%d" %(i+1, int(options['Search']['MaxLoops'])))
         book_search.search()
-        book_search.make_cmd()
-        cmd = (options['YaneuraOu']['EngineFile'] + " file "
-               + options['Search']['CommandFile'])
-        sp.call(cmd.split())
+
+    # やねうら定跡をテラショック定跡に変換する
+    book_search.bulid_terashock_build()
 
 
 if __name__ == '__main__':
