@@ -7,6 +7,7 @@
 import os
 import sys
 import subprocess as sp
+import numpy as np
 import shogi
 
 
@@ -101,22 +102,6 @@ class BestPVSearch:
             sys.exit(1)
 
 
-        # やねうら王定跡からテラショック定跡を作成する
-        with open(self.options['Search']['CommandFile'], 'w') as file:
-            file.write('EvalDir %s\n' %(self.options['YaneuraOu']['EvalDir']))
-            file.write('BookDir %s\n' %(self.options['YaneuraOu']['BookDir']))
-            file.write('Hash %s\n' %(self.options['YaneuraOu']['Hash']))
-            file.write('Threads %s\n' %(self.options['YaneuraOu']['Threads']))
-            file.write('makebook build_tree %s %s\n'
-                       %(self.options['Search']['YaneuraDBFile'],
-                         self.options['Search']['TeraShockDBFile']))
-            file.write('quit\n')
-
-        cmd = (self.options['YaneuraOu']['EngineFile'] + " file "
-               + self.options['Search']['CommandFile'])
-        sp.call(cmd.split())
-
-
         # 課題局面までの手順を探索し，定跡化作成する
         with open(self.options['Search']['CommandFile'], 'w') as file:
             file.write('EvalDir %s\n' %(self.options['YaneuraOu']['EvalDir']))
@@ -170,7 +155,7 @@ class BestPVSearch:
 
 
     @staticmethod
-    def _pv_search(theme_file, book, k):
+    def _pv_search(theme_file, book, k, correction):
         """
         最善応手上位(課題局面数×k)手を調べる
         """
@@ -183,7 +168,7 @@ class BestPVSearch:
 
         for theme in theme_list:
             pv_list = []
-            for _ in range(k):
+            for i in range(k):
                 same_pos = set()
                 preview = ['startpos moves', 0]
 
@@ -210,7 +195,12 @@ class BestPVSearch:
                 while sfen in book:
                     move_list = {}
                     for move in book[sfen]['moves']:
-                        move_list[move] = book[sfen]['moves'][move]['value']
+                        if i == 0:
+                            move_list[move] = book[sfen]['moves'][move]['value']
+                        else:
+                            move_list[move] = book[sfen]['moves'][move]['value'] \
+                                - (np.log2(book[sfen]['moves'][move]['depth'] + 1)
+                                   * correction)
                     move = max(move_list, key=move_list.get)
                     board.push_usi(move)
                     preview[0] += ' ' + move
@@ -336,7 +326,8 @@ class BestPVSearch:
                     if sfen in terashock_book:
                         for _move in yaneura_book[sfen]['moves']:
                             if _move not in terashock_book[sfen]['moves']:
-                                terashock_book[sfen]['moves'][_move] = yaneura_book[sfen]['moves'][_move]
+                                terashock_book[sfen]['moves'][_move] = \
+                                    yaneura_book[sfen]['moves'][_move]
                                 terashock_book[sfen]['moves'][_move]['depth'] = 0
 
             # テラショック定跡に局面を追加
@@ -347,7 +338,17 @@ class BestPVSearch:
                 terashock_book[sfen] = yaneura_book[sfen]
                 for move in terashock_book[sfen]['moves']:
                     terashock_book[sfen]['moves'][move]['depth'] = 0
-
+            elif sfen in terashock_book and sfen in yaneura_book:
+                for move in yaneura_book[sfen]['moves']:
+                    if move not in terashock_book[sfen]['moves']:
+                        terashock_book[sfen]['moves'][move] = \
+                            yaneura_book[sfen]['moves'][move]
+                        terashock_book[sfen]['moves'][move]['depth'] = 0
+            else:
+                board.pop()
+                sfen = board.sfen().split(' ')
+                turn = int(sfen[3])
+                sfen = sfen[0] +" " + sfen[1] + " " + sfen[2]
 
             # 末端局面の評価値を計算する
             if draw is True:
@@ -387,9 +388,11 @@ class BestPVSearch:
                 if next_sfen in terashock_book:
                     next_move_list = {}
                     for next_move in terashock_book[next_sfen]['moves']:
-                        next_move_list[next_move] = terashock_book[next_sfen]['moves'][next_move]['value']
+                        next_move_list[next_move] = \
+                            terashock_book[next_sfen]['moves'][next_move]['value']
                     next_move = max(next_move_list, key=next_move_list.get)
-                    terashock_book[sfen]['moves'][move]['depth'] = terashock_book[next_sfen]['moves'][next_move]['depth'] + 1
+                    terashock_book[sfen]['moves'][move]['depth'] = \
+                        terashock_book[next_sfen]['moves'][next_move]['depth'] + 1
                 board.pop()
 
                 move_list = {}
@@ -452,7 +455,8 @@ class BestPVSearch:
                                   self.terashock_book,
                                   int(int(
                                       self.options['YaneuraOu']['Threads'])
-                                      * k))
+                                      * k),
+                                  int(self.options['Search']['CorrectionValue']))
 
         # 最善応手群をファイルに書き込む
         with open(self.options['Search']['BestPVFile'], 'w') as file:
