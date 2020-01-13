@@ -24,6 +24,15 @@ class BestPVSearch:
         self.black_resign = None
         self.white_resign = None
         self.book_count = 0
+        self.shogi_pos = {'A1': shogi.A1, 'A2': shogi.A2, 'A3': shogi.A3, 'A4': shogi.A4, 'A5': shogi.A5, 'A6': shogi.A6, 'A7': shogi.A7, 'A8': shogi.A8, 'A9': shogi.A9,
+                          'B1': shogi.B1, 'B2': shogi.B2, 'B3': shogi.B3, 'B4': shogi.B4, 'B5': shogi.B5, 'B6': shogi.B6, 'B7': shogi.B7, 'B8': shogi.B8, 'B9': shogi.B9,
+                          'C1': shogi.C1, 'C2': shogi.C2, 'C3': shogi.C3, 'C4': shogi.C4, 'C5': shogi.C5, 'C6': shogi.C6, 'C7': shogi.C7, 'C8': shogi.C8, 'C9': shogi.C9,
+                          'D1': shogi.D1, 'D2': shogi.D2, 'D3': shogi.D3, 'D4': shogi.D4, 'D5': shogi.D5, 'D6': shogi.D6, 'D7': shogi.D7, 'D8': shogi.D8, 'D9': shogi.D9,
+                          'E1': shogi.E1, 'E2': shogi.E2, 'E3': shogi.E3, 'E4': shogi.E4, 'E5': shogi.E5, 'E6': shogi.E6, 'E7': shogi.E7, 'E8': shogi.E8, 'E9': shogi.E9,
+                          'F1': shogi.F1, 'F2': shogi.F2, 'F3': shogi.F3, 'F4': shogi.F4, 'F5': shogi.F5, 'F6': shogi.F6, 'F7': shogi.F7, 'F8': shogi.F8, 'F9': shogi.F9,
+                          'G1': shogi.G1, 'G2': shogi.G2, 'G3': shogi.G3, 'G4': shogi.G4, 'G5': shogi.G5, 'G6': shogi.G6, 'G7': shogi.G7, 'G8': shogi.G8, 'G9': shogi.G9,
+                          'H1': shogi.H1, 'H2': shogi.H2, 'H3': shogi.H3, 'H4': shogi.H4, 'H5': shogi.H5, 'H6': shogi.H6, 'H7': shogi.H7, 'H8': shogi.H8, 'H9': shogi.H9,
+                          'I1': shogi.I1, 'I2': shogi.I2, 'I3': shogi.I3, 'I4': shogi.I4, 'I5': shogi.I5, 'I6': shogi.I6, 'I7': shogi.I7, 'I8': shogi.I8, 'I9': shogi.I9,}
 
 
 
@@ -279,6 +288,8 @@ class BestPVSearch:
         else:
             self.multi_pv = int(self.options['Search']['MinMultiPV'])
 
+
+
     @staticmethod
     def _difference_book_build(yaneura_book, terashock_book, pv_search_file,
                                black_contempt, white_contempt,
@@ -419,6 +430,58 @@ class BestPVSearch:
                                                     1))
 
 
+
+    def _forbidden_book(self, book, book_fpath, forbidden_fpath):
+        # 禁止条件ファイルを読み込む
+        forbidden_pos = {}
+        with open(forbidden_fpath, 'r') as file:
+            data = file.readline()
+            while data != '':
+                data = data.split(' ')
+                forbidden_pos[data[2]] = {'start': int(data[0]),
+                                          'end': int(data[1]),
+                                          'pos': data[3:]}
+                data = file.readline()
+
+        # 定跡の評価値を更新し、ファイルに書き込む
+        with open(book_fpath, 'w') as file:
+            file.write('#YANEURAOU-DB2016 1.00\n')
+
+            for sfen in sorted(book.keys()):
+                board = shogi.Board(f'{sfen} {book[sfen]["turn"]}')
+                flag = False
+                for piece in forbidden_pos:
+                    if forbidden_pos[piece]['start'] <= book[sfen]['turn'] <= forbidden_pos[piece]['end']:
+                        for pos in forbidden_pos[piece]['pos']:
+                            if str(board.piece_at(self.shogi_pos[pos])) == piece:
+                                flag = True
+                file.write('sfen %s %d\n' %(sfen,
+                                            book[sfen]['turn']))
+                if flag:
+                    for move in book[sfen]['moves']:
+                        if book[sfen]['turn'] %2 == 0:
+                            book[sfen]['moves'][move]['value'] = 10000
+                        else:
+                            book[sfen]['moves'][move]['value'] = -10000
+                        file.write('%s %s %d %d %d\n' %(move,
+                                                        book[sfen]['moves'][move]['move'],
+                                                        book[sfen]['moves'][move]['value'],
+                                                        book[sfen]['moves'][move]['depth'],
+                                                        1))
+                else:
+                    for move in book[sfen]['moves']:
+                        file.write('%s %s %d %d %d\n' %(move,
+                                                        book[sfen]['moves'][move]['move'],
+                                                        book[sfen]['moves'][move]['value'],
+                                                        book[sfen]['moves'][move]['depth'],
+                                                        1))
+
+
+        return book
+
+
+
+
     def search(self):
         """
         登録済み定跡を用いて課題局面からの最善応手上位N手を調べる
@@ -427,8 +490,14 @@ class BestPVSearch:
         # 定跡データベース
         self.yaneura_book = self._load_yaneura_book(
             self.options['Search']['YaneuraDBFile'])
+        self.yaneura_book = self._forbidden_book(
+            self.yaneura_book, self.options['Search']['YaneuraDBFile'],
+            self.options['Search']['ForbiddenFile'])
         self.terashock_book = self._load_yaneura_book(
             self.options['Search']['TeraShockDBFile'])
+        self.terashock_book = self._forbidden_book(
+            self.terashock_book, self.options['Search']['TeraShockDBFile'],
+            self.options['Search']['ForbiddenFile'])
 
         # 定跡登録数が増えてなければ探索を終了する
         book_count = len(self.yaneura_book)
