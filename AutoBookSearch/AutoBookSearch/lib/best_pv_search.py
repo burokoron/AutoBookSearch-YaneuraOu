@@ -416,7 +416,7 @@ class BestPVSearch:
 
 
         # テラショック定跡をファイルに書き込む
-        with open(terashock_book_file, 'w') as file:
+        with open(f'{terashock_book_file}.tmp', 'w') as file:
             file.write('#YANEURAOU-DB2016 1.00\n')
 
             for sfen in sorted(terashock_book.keys()):
@@ -428,6 +428,8 @@ class BestPVSearch:
                                                     terashock_book[sfen]['moves'][move]['value'],
                                                     terashock_book[sfen]['moves'][move]['depth'],
                                                     1))
+        os.remove(f'{terashock_book_file}')
+        os.rename(f'{terashock_book_file}.tmp', f'{terashock_book_file}')
 
 
 
@@ -444,7 +446,7 @@ class BestPVSearch:
                 data = file.readline()
 
         # 定跡の評価値を更新し、ファイルに書き込む
-        with open(book_fpath, 'w') as file:
+        with open(f'{book_fpath}.tmp', 'w') as file:
             file.write('#YANEURAOU-DB2016 1.00\n')
 
             for sfen in sorted(book.keys()):
@@ -475,6 +477,8 @@ class BestPVSearch:
                                                         book[sfen]['moves'][move]['value'],
                                                         book[sfen]['moves'][move]['depth'],
                                                         1))
+        os.remove(f'{book_fpath}')
+        os.rename(f'{book_fpath}.tmp', f'{book_fpath}')
 
 
         return book
