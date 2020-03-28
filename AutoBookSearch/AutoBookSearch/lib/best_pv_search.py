@@ -448,15 +448,21 @@ class BestPVSearch:
         # 定跡の評価値を更新し、ファイルに書き込む
         with open(f'{book_fpath}.tmp', 'w') as file:
             file.write('#YANEURAOU-DB2016 1.00\n')
-
+            
+            flag_ignore = False
             for sfen in sorted(book.keys()):
                 board = shogi.Board(f'{sfen} {book[sfen]["turn"]}')
                 flag = False
                 for piece in forbidden_pos:
                     if forbidden_pos[piece]['start'] <= book[sfen]['turn'] <= forbidden_pos[piece]['end']:
                         for pos in forbidden_pos[piece]['pos']:
-                            if str(board.piece_at(self.shogi_pos[pos])) == piece:
-                                flag = True
+                            try:
+                                if str(board.piece_at(self.shogi_pos[pos])) == piece:
+                                    flag = True
+                            except:
+                                if not flag_ignore:
+                                    print(f'Ignore: Illegal prohibited position "{pos}"')
+                                    flag_ignore = True
                 file.write('sfen %s %d\n' %(sfen,
                                             book[sfen]['turn']))
                 if flag:
