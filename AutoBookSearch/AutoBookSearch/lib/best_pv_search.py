@@ -439,7 +439,7 @@ class BestPVSearch:
         with open(forbidden_fpath, 'r') as file:
             data = file.readline()
             while data != '':
-                data = data.split(' ')
+                data = data.replace('\n', '').split(' ')
                 forbidden_pos[data[2]] = {'start': int(data[0]),
                                           'end': int(data[1]),
                                           'pos': data[3:]}
